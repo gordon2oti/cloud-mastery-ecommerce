@@ -27,3 +27,41 @@ body {
 .card {
   @apply bg-white rounded-xl hover:shadow transition-all cursor-pointer shadow-md p-4;
 }
+
+/* ============================================================
+   Chat Messenger Widget — Global CSS overrides
+   These must live here (globals.css) so they are NOT scoped
+   by styled-jsx and CAN pierce the Shadow DOM of the widget.
+   Token names sourced from official Google Cloud docs table.
+   ============================================================ */
+chat-messenger {
+  /* Size: slightly larger than default (default is 360×780) */
+  --chat-messenger-internal-chat-window-width: 480px;
+  --chat-messenger-internal-chat-window-height: 680px;
+
+  /* ── Official public colour tokens (--chat-messenger-color--*) ── */
+
+  /* Primary = titlebar, send button, active accents → Hazel Market brown */
+  --chat-messenger-color--primary: #4a3b32;
+  --chat-messenger-color--on-primary: #ffffff;
+  --chat-messenger-color--primary-container: #6b5247;
+  --chat-messenger-color--on-primary-container: #f5ede9;
+
+  /* Secondary = user chat bubbles → Hazel Market green */
+  --chat-messenger-color--secondary: #5a7054;
+  --chat-messenger-color--on-secondary: #ffffff;
+
+  /* Surface = background of the chat window */
+  --chat-messenger-color--surface: #ffffff;
+  --chat-messenger-color--surface-container: #f5f1ee;
+  --chat-messenger-color--surface-container-high: #eeeae6;
+  --chat-messenger-color--on-surface: #1f2937;
+  --chat-messenger-color--on-surface-variant: #6b7280;
+
+  /* Outlines → warm taupe matching the Hazel Market palette */
+  --chat-messenger-color--outline: #d6cfc9;
+  --chat-messenger-color--outline-variant: #e8e4e1;
+
+  /* Link colour */
+  --chat-messenger-color--link: #4a3b32;
+}

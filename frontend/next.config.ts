@@ -22,7 +22,10 @@ const nextConfig: NextConfig = {
       },
       { hostname: "loremflickr.com" },
       { hostname: "placehold.co" },
-      { hostname: "images.unsplash.com" }
+      { hostname: "images.unsplash.com" },
+      { hostname: "storage.cloud.google.com" },
+      { hostname: "storage.googleapis.com" },
+      { hostname: "gstatic.com" },
     ],
   },
 };
