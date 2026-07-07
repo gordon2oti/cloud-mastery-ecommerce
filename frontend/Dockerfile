@@ -32,16 +32,12 @@ ARG NEXT_PUBLIC_CHAT_TITLE=""
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Set environment variables and build
-RUN if [ -f .env ]; then \
-  set -a && . ./.env && set +a; \
-  else \
-  export NEXT_PUBLIC_APP_NAME="${NEXT_PUBLIC_APP_NAME}"; \
-  export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}"; \
-  export NEXT_PUBLIC_CART_API_URL="${NEXT_PUBLIC_CART_API_URL}"; \
-  export NEXT_PUBLIC_CHAT_DEPLOYMENT="${NEXT_PUBLIC_CHAT_DEPLOYMENT}"; \
-  export NEXT_PUBLIC_CHAT_TITLE="${NEXT_PUBLIC_CHAT_TITLE}"; \
-  fi && \
+# Build using explicit build args so deployed bundles don't accidentally use local .env values.
+RUN export NEXT_PUBLIC_APP_NAME="${NEXT_PUBLIC_APP_NAME}" && \
+  export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL}" && \
+  export NEXT_PUBLIC_CART_API_URL="${NEXT_PUBLIC_CART_API_URL}" && \
+  export NEXT_PUBLIC_CHAT_DEPLOYMENT="${NEXT_PUBLIC_CHAT_DEPLOYMENT}" && \
+  export NEXT_PUBLIC_CHAT_TITLE="${NEXT_PUBLIC_CHAT_TITLE}" && \
   npm run build --legacy-peer-deps
 
 # Build with output tracing for better optimization

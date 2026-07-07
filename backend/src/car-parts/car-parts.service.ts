@@ -42,8 +42,7 @@ export class CarPartsService {
             CAST(priceKes AS STRING) AS priceKes,
             image_url AS imageUrl,
             created_at,
-            updated_at,
-            order_id
+            updated_at
           FROM \`${this.partsTable}\`
           ORDER BY created_at DESC
         `,
