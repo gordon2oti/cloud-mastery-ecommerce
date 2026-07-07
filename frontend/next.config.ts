@@ -3,12 +3,6 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   images: {
-    domains: [
-      "loremflickr.com",
-      "placehold.co",
-      "storage.cloud.google.com",
-      "storage.googleapis.com",
-    ],
     remotePatterns: [
       {
         protocol: "https",
