@@ -126,7 +126,8 @@ jobs:
             --service-account=$DEPLOYER_SERVICE_ACCOUNT \
             --port 8080 \
             --allow-unauthenticated \
-            --set-env-vars "MYSQL_PRISMA_URL=${{ secrets.MYSQL_PRISMA_URL }}" \
+            --remove-secrets MYSQL_PRISMA_URL \
+            --update-env-vars "MYSQL_PRISMA_URL=${{ secrets.MYSQL_PRISMA_URL }}" \
             --add-cloudsql-instances=${{ secrets.CLOUDSQL_INSTANCE_CONNECTION_NAME }}
 
         # Run Prisma migrations and seed database
