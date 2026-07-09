@@ -20,7 +20,7 @@ jobs:
       BQ_DATASET: ${{ vars.BQ_DATASET || 'cloud_mastery' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate required secrets
         run: |
@@ -41,14 +41,14 @@ jobs:
           : "${{ secrets.FRONTEND_NEXT_PUBLIC_CART_API_URL || secrets.NEXT_PUBLIC_CART_API_URL }}"
 
       - name: Authenticate to Google Cloud with Workload Identity Federation
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
           token_format: 'access_token'
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           install_components: 'beta'
@@ -201,7 +201,7 @@ jobs:
       CONNECT_BIGQUERY_TABLES: ${{ vars.CONNECT_BIGQUERY_TABLES || 'table_parts_catalog,table_finance,orders,order_details,customers,products' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Validate required secrets for functions
         run: |
@@ -216,14 +216,14 @@ jobs:
           : "${{ secrets.DB_NAME }}"
 
       - name: Authenticate to Google Cloud with Workload Identity Federation
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ env.DEPLOYER_SERVICE_ACCOUNT }}
           token_format: 'access_token'
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
+        uses: google-github-actions/setup-gcloud@v3
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           install_components: 'beta'
