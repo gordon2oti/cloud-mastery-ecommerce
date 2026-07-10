@@ -365,7 +365,7 @@ export default function ChatWidget() {
           left: isFolded ? "16px" : "14px",
           top: isFolded ? "16px" : "13px",
           zIndex: 100000,
-          background: isFolded ? "rgba(74, 59, 50, 0.08)" : "rgba(255, 255, 255, 0.15)",
+          background: isFolded ? "rgba(255, 255, 255, 0.15)" : "rgba(255, 255, 255, 0.15)",
           border: "none",
           borderRadius: "6px",
           width: "24px",
@@ -381,8 +381,8 @@ export default function ChatWidget() {
         aria-label={isFolded ? "Expand Agent" : "Collapse Agent"}
       >
         <svg
-          width="14"
-          height="14"
+          width="22"
+          height="22"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -390,11 +390,20 @@ export default function ChatWidget() {
           strokeLinecap="round"
           strokeLinejoin="round"
           style={{
-            transform: isFolded ? "rotate(180deg)" : "rotate(0deg)",
+            transform: isFolded ? "none" : "rotate(0deg)",
             transition: "transform 0.3s",
           }}
         >
-          <polyline points="6 9 12 15 18 9"></polyline>
+          {isFolded ? (
+            <>
+              <path d="M21 11.5C21 16.19 16.97 20 12 20C10.61 20 9.28 19.7 8.1 19.15L4 20L4.9 16.49C3.72 15.09 3 13.36 3 11.5C3 6.81 7.03 3 12 3C16.97 3 21 6.81 21 11.5Z" />
+              <circle cx="9" cy="11.5" r="0.7" fill="currentColor" stroke="none" />
+              <circle cx="12" cy="11.5" r="0.7" fill="currentColor" stroke="none" />
+              <circle cx="15" cy="11.5" r="0.7" fill="currentColor" stroke="none" />
+            </>
+          ) : (
+            <polyline points="6 9 12 15 18 9"></polyline>
+          )}
         </svg>
       </button>
 
