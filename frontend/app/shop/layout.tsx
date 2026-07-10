@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { Space_Grotesk } from "next/font/google";
 import { ShopProvider, useShop } from "./ShopProvider";
 import { Toaster } from "react-hot-toast";
@@ -13,6 +14,7 @@ const spaceGrotesk = Space_Grotesk({
 
 function ShopNavigation() {
   const { cartCount } = useShop();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const links = [
     { href: "/shop", label: "Home" },
@@ -30,7 +32,43 @@ function ShopNavigation() {
           Soko Marketplace
         </Link>
 
-        <nav className="flex items-center gap-2 rounded-full bg-amber-50 p-1">
+        <button
+          type="button"
+          aria-label="Toggle navigation menu"
+          aria-expanded={isMenuOpen}
+          aria-controls="shop-mobile-nav"
+          onClick={() => setIsMenuOpen((prev) => !prev)}
+          className="inline-flex items-center justify-center rounded-lg border border-amber-200 bg-amber-50 p-2 text-slate-700 transition hover:bg-amber-100 md:hidden"
+        >
+          <span className="sr-only">Open menu</span>
+          <svg
+            className="h-5 w-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            {isMenuOpen ? (
+              <path
+                d="M6 6L18 18M18 6L6 18"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ) : (
+              <path
+                d="M4 7H20M4 12H20M4 17H20"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+          </svg>
+        </button>
+
+        <nav className="hidden items-center gap-2 rounded-full bg-amber-50 p-1 md:flex">
           {links.map((link) => (
             <Link
               key={link.href}
@@ -42,6 +80,23 @@ function ShopNavigation() {
           ))}
         </nav>
       </div>
+
+      {isMenuOpen && (
+        <nav id="shop-mobile-nav" className="border-t border-amber-100 px-4 py-3 md:hidden">
+          <div className="flex flex-col gap-2">
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                onClick={() => setIsMenuOpen(false)}
+                className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-amber-100"
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+        </nav>
+      )}
     </header>
   );
 }

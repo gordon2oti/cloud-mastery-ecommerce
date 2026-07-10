@@ -13,13 +13,41 @@ interface Session {
 }
 
 export default function ChatWidget() {
+  const OPEN_ANIMATION_MS = 360;
   const deploymentName = process.env.NEXT_PUBLIC_CHAT_DEPLOYMENT;
   const chatTitle = process.env.NEXT_PUBLIC_CHAT_TITLE || "Support Agent";
   const messengerRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLElement>(null);
+  const skipNextAssistantMessageRef = useRef(false);
+  const openTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [chatReady, setChatReady] = useState(false);
   const [isFolded, setIsFolded] = useState(false);
+  const [isContentVisible, setIsContentVisible] = useState(true);
+
+  useEffect(() => {
+    if (openTimerRef.current) {
+      clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+
+    if (isFolded) {
+      setIsContentVisible(false);
+      return;
+    }
+
+    openTimerRef.current = setTimeout(() => {
+      setIsContentVisible(true);
+      openTimerRef.current = null;
+    }, OPEN_ANIMATION_MS);
+
+    return () => {
+      if (openTimerRef.current) {
+        clearTimeout(openTimerRef.current);
+        openTimerRef.current = null;
+      }
+    };
+  }, [isFolded]);
 
   // Restore session from sessionStorage on page load
   useEffect(() => {
@@ -34,12 +62,58 @@ export default function ChatWidget() {
     }
   }, []);
 
-  // ── Intercept window.fetch to capture the true session ID ─────────────
-  // We extract the session ID from the request URL, because that is the exact
-  // ID that Dialogflow CX assigns to $context.session_id internally and uses
-  // for all OpenAPI tool calls.
+  // Intercept window.fetch to capture the true session ID 
   useEffect(() => {
     const originalFetch = window.fetch;
+
+    const tryArmSkipFromBody = (bodyValue: unknown) => {
+      if (!bodyValue || typeof bodyValue !== "string") return;
+      if (bodyValue.toLowerCase().includes("view cart total")) {
+        skipNextAssistantMessageRef.current = true;
+      }
+    };
+
+    const skipFirstAssistantText = (payload: unknown) => {
+      if (!payload || typeof payload !== "object") return payload;
+
+      const mutable = payload as Record<string, unknown>;
+      let skipped = false;
+
+      const outputs = Array.isArray(mutable.outputs) ? (mutable.outputs as Record<string, unknown>[]) : [];
+      for (const output of outputs) {
+        if (skipped) break;
+        if (typeof output.text === "string" && output.text.trim()) {
+          output.text = "";
+          skipped = true;
+        }
+      }
+
+      if (!skipped) {
+        const diagnosticInfo = mutable.diagnosticInfo;
+        if (diagnosticInfo && typeof diagnosticInfo === "object") {
+          const messages = Array.isArray((diagnosticInfo as Record<string, unknown>).messages)
+            ? ((diagnosticInfo as Record<string, unknown>).messages as Record<string, unknown>[])
+            : [];
+
+          for (const message of messages) {
+            if (skipped) break;
+            const role = typeof message.role === "string" ? message.role.toLowerCase() : "";
+            if (!role.includes("agent")) continue;
+
+            const chunks = Array.isArray(message.chunks) ? (message.chunks as Record<string, unknown>[]) : [];
+            for (const chunk of chunks) {
+              if (typeof chunk.text === "string" && chunk.text.trim()) {
+                chunk.text = "";
+                skipped = true;
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      return mutable;
+    };
 
     window.fetch = async (...args) => {
       const [resource, options] = args;
@@ -47,7 +121,6 @@ export default function ChatWidget() {
 
       if (url && (url.includes(":runSession") || url.includes(":converseConversation") || url.includes(":detectIntent"))) {
         try {
-          // Extract "dfMessenger-..." from ".../sessions/dfMessenger-...:runSession" or "...:converseConversation"
           const match = url.match(/\/sessions\/([^:]+):/);
           if (match && match[1]) {
             const agentSessionId = match[1];
@@ -62,7 +135,6 @@ export default function ChatWidget() {
               if (storedStr) {
                 const stored = JSON.parse(storedStr);
                 if (stored.name) {
-
                   await createSession({
                     sessionId: agentSessionId,
                     name: stored.name,
@@ -78,7 +150,54 @@ export default function ChatWidget() {
         }
       }
 
-      return originalFetch(...args);
+      const isCesRunSession =
+        typeof url === "string" &&
+        url.includes("ces.googleapis.com") &&
+        (url.includes(":runSession") || url.includes(":converseConversation") || url.includes(":detectIntent"));
+
+      if (isCesRunSession) {
+        try {
+          if (typeof options?.body === "string") {
+            tryArmSkipFromBody(options.body);
+          }
+
+          if (typeof Request !== "undefined" && resource instanceof Request) {
+            const requestBody = await resource.clone().text();
+            tryArmSkipFromBody(requestBody);
+          }
+        } catch {
+          // Ignore request body read errors
+        }
+      }
+
+      const response = await originalFetch(...args);
+
+      if (!isCesRunSession) {
+        return response;
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.toLowerCase().includes("application/json")) {
+        return response;
+      }
+
+      try {
+        const payload = await response.clone().json();
+        const shouldSkip = skipNextAssistantMessageRef.current;
+        if (shouldSkip) {
+          skipNextAssistantMessageRef.current = false;
+        }
+
+        const sanitized = shouldSkip ? skipFirstAssistantText(payload) : payload;
+
+        return new Response(JSON.stringify(sanitized), {
+          status: response.status,
+          statusText: response.statusText,
+          headers: response.headers,
+        });
+      } catch {
+        return response;
+      }
     };
 
     return () => {
@@ -86,12 +205,10 @@ export default function ChatWidget() {
     };
   }, []);
 
-
   // Boot the chat messenger SDK once we have a session
   useEffect(() => {
     if (!deploymentName || !chatReady || !session) return;
 
-    // Set attributes imperatively so TSX never silently drops them
     if (messengerRef.current) {
       messengerRef.current.setAttribute("url-allowlist", "*");
     }
@@ -104,8 +221,6 @@ export default function ChatWidget() {
       containerRef.current.setAttribute("enable-file-upload", "true");
     }
 
-    // Set session parameters as a JSON attribute directly on the element.
-    // This is an alternative path the SDK reads BEFORE the JS API parameters key.
     if (messengerRef.current && session) {
       messengerRef.current.setAttribute(
         "parameters",
@@ -118,7 +233,6 @@ export default function ChatWidget() {
       );
     }
 
-    // Register SDK context with session parameters so the agent knows who the user is
     const handleLoaded = () => {
       const chatSdk = (window as any).chatSdk;
       if (chatSdk) {
@@ -144,76 +258,70 @@ export default function ChatWidget() {
       const tryInject = () => {
         const shadow = el.shadowRoot;
         if (!shadow) return false;
-
-        // Avoid double-injecting
         if (shadow.querySelector("#hazel-market-styles")) return true;
 
         const style = document.createElement("style");
         style.id = "hazel-market-styles";
         style.textContent = `
-          /* ── Hazel Market brand overrides injected into shadow root ── */
+          /* ── Injecting Documentation Tokens directly to Shadow Host ── */
+          :host, * {
+            --chat-messenger-font-family: 'Google Sans', sans-serif !important;
+            
+            /* Containers / Surfaces */
+            --chat-messenger-color--surface: #eeeae6 !important;
+            --chat-messenger-color--surface-container: #eeeae6 !important;
+            --chat-messenger-color--surface-container-high: #e0dbd6 !important;
+            
+            /* Brand / Accent */
+            --chat-messenger-color--primary: #4a3b32 !important;
+            --chat-messenger-color--primary-container: #c4a898 !important;
+            --chat-messenger-color--secondary: #927b70 !important;
+            
+            /* Text & Icons */
+            --chat-messenger-color--on-surface: #38414c !important;
+            --chat-messenger-color--on-surface-variant: #6b7280 !important;
+            --chat-messenger-color--on-primary: #ffffff !important;
+            --chat-messenger-color--on-primary-container: #3d2b22 !important;
+            --chat-messenger-color--on-secondary: #ffffff !important;
+            
+            /* Utility */
+            --chat-messenger-color--outline: #d6cfc9 !important;
+            --chat-messenger-color--outline-variant: #e8e4e1 !important;
+            --chat-messenger-color--link: #4a3b32 !important;
+            
+            /* Shape & Structural Configuration */
+            --chat-messenger-shape--corner-value-extra-large: 16px !important;
+          }
 
-          /* Titlebar */
-          .titlebar, [class*="titlebar"], chat-messenger-titlebar,
-          .chat-header, [class*="header"] {
-            background-color: #9a7a66ff !important;
+          /* Structural Deep Overrides if internal component code locks out host tokens */
+          .titlebar, [class*="titlebar"], chat-messenger-titlebar {
+            background-color: #4a3b32 !important;
             color: #ffffff !important;
             padding-left: 48px !important;
           }
 
-          /* Primary button / send button */
-          button[class*="send"], button[class*="submit"],
-          [class*="send-button"], [class*="primary-button"] {
+          button[class*="send"], [class*="send-button"] {
             background-color: #4a3b32 !important;
             color: #ffffff !important;
-            border-color: #a67455ff !important;
-          }
-
-          /* User message bubbles */
-          [class*="user-message"], [class*="human-message"],
-          [class*="outgoing"] {
-            background-color: #5a7054 !important;
-            color: #ffffff !important;
-          }
-
-          /* Bot message bubbles */
-          [class*="bot-message"], [class*="agent-message"],
-          [class*="incoming"], [class*="model-message"] {
-            background-color: #f5f1ee !important;
-            color: #38414cff !important;
-          }
-
-          /* Input area */
-          [class*="input-area"], [class*="input-container"],
-          [class*="composer"] {
-            border-top-color: #d6cfc9 !important;
           }
 
           input, textarea {
-            color: #1f2937 !important;
-          }
-
-          /* Active/focus accents */
-          [class*="active"], *:focus {
-            outline-color: #4a3b32 !important;
+            color: #38414c !important;
           }
         `;
         shadow.appendChild(style);
         return true;
       };
 
-      // Try immediately, then watch for shadow root population via MutationObserver
       if (!tryInject()) {
         const observer = new MutationObserver(() => {
           if (tryInject()) observer.disconnect();
         });
         observer.observe(el, { childList: true, subtree: true });
-        // Clean up after 10 s to avoid leaks if shadow never populates
         setTimeout(() => observer.disconnect(), 10000);
       }
     };
 
-    // Race-condition guard: if script already loaded before this effect ran
     if ((window as any).chatSdk) {
       handleLoaded();
     } else {
@@ -225,39 +333,39 @@ export default function ChatWidget() {
     };
   }, [deploymentName, chatReady, session, chatTitle]);
 
-  // Handler called by OnboardingForm on successful submit
   const handleFormComplete = (newSession: Session) => {
     setSession(newSession);
     setChatReady(true);
   };
 
-  // Widget is invisible until deployment name is set in .env
   if (!deploymentName) return null;
 
   return (
     <div
       style={{
         position: "fixed",
-        bottom: "20px",
-        right: "20px",
+        bottom: "16px",
+        right: "16px",
         zIndex: 99999,
-        width: "400px",
-        height: isFolded ? "50px" : "560px",
-        maxHeight: isFolded ? "50px" : "560px",
+        width: isFolded ? "56px" : "min(400px, calc(100vw - 24px))",
+        height: isFolded ? "56px" : "min(560px, calc(100vh - 24px))",
+        maxHeight: isFolded ? "56px" : "min(560px, calc(100vh - 24px))",
         overflow: "hidden",
-        borderRadius: "16px",
+        background: "#eeeae6",
+        borderRadius: isFolded ? "9999px" : "28px",
+        transformOrigin: "bottom right",
         boxShadow: isFolded ? "0 4px 12px rgba(74,59,50,0.15)" : "0 8px 32px rgba(74,59,50,0.18)",
-        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        transition: "width 0.36s cubic-bezier(0.25, 0.8, 0.25, 1), height 0.36s cubic-bezier(0.25, 0.8, 0.25, 1), border-radius 0.18s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.36s cubic-bezier(0.25, 0.8, 0.25, 1)",
       }}
     >
       <button
         onClick={() => setIsFolded(!isFolded)}
         style={{
           position: "absolute",
-          left: "14px",
-          top: "13px",
+          left: isFolded ? "16px" : "14px",
+          top: isFolded ? "16px" : "13px",
           zIndex: 100000,
-          background: "rgba(255, 255, 255, 0.15)",
+          background: isFolded ? "rgba(74, 59, 50, 0.08)" : "rgba(255, 255, 255, 0.15)",
           border: "none",
           borderRadius: "6px",
           width: "24px",
@@ -266,7 +374,7 @@ export default function ChatWidget() {
           alignItems: "center",
           justifyContent: "center",
           cursor: "pointer",
-          color: "#000000",
+          color: isFolded ? "#4a3b32" : "#898989",
           transition: "background 0.2s, transform 0.3s",
         }}
         title={isFolded ? "Expand Agent" : "Collapse Agent"}
@@ -290,45 +398,40 @@ export default function ChatWidget() {
         </svg>
       </button>
 
-      {!chatReady ? (
-        <OnboardingForm onComplete={handleFormComplete} />
-      ) : (
-        <chat-messenger
-          ref={messengerRef}
-          style={{
-            width: "100%",
-            height: "100%",
-            display: "block",
-            "--chat-messenger-color--primary": "#4a3b32",
-            "--chat-messenger-color--on-primary": "#ffffff",
-            "--chat-messenger-color--primary-container": "#c4a898",
-            "--chat-messenger-color--on-primary-container": "#3d2b22",
-            "--chat-messenger-color--secondary": "#927b70",
-            "--chat-messenger-color--on-secondary": "#ffffff",
-            "--chat-messenger-color--surface": "#eeeae6",
-            "--chat-messenger-color--surface-container": "#eeeae6",
-            "--chat-messenger-color--surface-container-high": "#e0dbd6",
-            "--chat-messenger-color--on-surface": "#38414c",
-            "--chat-messenger-color--on-surface-variant": "#6b7280",
-            "--chat-messenger-color--outline": "#d6cfc9",
-            "--chat-messenger-color--outline-variant": "#e8e4e1",
-            "--chat-messenger-color--link": "#4a3b32",
-            "--chat-messenger-internal-chat-window-width": "400px",
-            "--chat-messenger-internal-chat-window-height": "560px",
-          }}
-        >
-          <chat-messenger-container ref={containerRef}>
-            <chat-reset-session-button
-              slot="titlebar-actions"
-              title-text="Start new chat"
-            ></chat-reset-session-button>
-            <chat-messenger-close-button
-              slot="titlebar-actions"
-              title-text="Close"
-            ></chat-messenger-close-button>
-          </chat-messenger-container>
-        </chat-messenger>
-      )}
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          opacity: isContentVisible ? 1 : 0,
+          visibility: isContentVisible ? "visible" : "hidden",
+          pointerEvents: isContentVisible ? "auto" : "none",
+          transition: "opacity 0.18s ease",
+        }}
+      >
+        {!chatReady ? (
+          <OnboardingForm onComplete={handleFormComplete} />
+        ) : (
+          <chat-messenger
+            ref={messengerRef}
+            style={{
+              width: "100%",
+              height: "100%",
+              display: "block",
+            }}
+          >
+            <chat-messenger-container ref={containerRef}>
+              <chat-reset-session-button
+                slot="titlebar-actions"
+                title-text="Start new chat"
+              ></chat-reset-session-button>
+              <chat-messenger-close-button
+                slot="titlebar-actions"
+                title-text="Close"
+              ></chat-messenger-close-button>
+            </chat-messenger-container>
+          </chat-messenger>
+        )}
+      </div>
     </div>
   );
 }
