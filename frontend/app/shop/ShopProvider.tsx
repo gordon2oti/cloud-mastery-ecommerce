@@ -35,6 +35,7 @@ type ShopContextType = {
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
+  resetShopState: () => void;
   cartCount: number;
   cartTotal: number;
 };
@@ -44,12 +45,17 @@ const ShopContext = createContext<ShopContextType | null>(null);
 const CART_STORAGE_KEY = "shop-cart-items";
 const SESSION_STORAGE_KEY = "hazel-session";
 const CUSTOMER_STORAGE_KEY = "shop-selected-customer-id";
+const LOCAL_CART_STORAGE_KEY = "shop-cart-items-local";
+const LOCAL_SESSION_STORAGE_KEY = "hazel-session-local";
+const LOCAL_CUSTOMER_STORAGE_KEY = "shop-selected-customer-id-local";
 
 /** Read session from sessionStorage (cleared on tab/refresh). */
 function readSession(): Session {
   if (typeof window === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem(SESSION_STORAGE_KEY);
+    const raw =
+      sessionStorage.getItem(SESSION_STORAGE_KEY) ||
+      localStorage.getItem(LOCAL_SESSION_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     
@@ -57,6 +63,10 @@ function readSession(): Session {
     if (parsed.createdAt && Date.now() - parsed.createdAt > 20 * 60 * 1000) {
       sessionStorage.removeItem(SESSION_STORAGE_KEY);
       sessionStorage.removeItem(CART_STORAGE_KEY);
+      sessionStorage.removeItem(CUSTOMER_STORAGE_KEY);
+      localStorage.removeItem(LOCAL_SESSION_STORAGE_KEY);
+      localStorage.removeItem(LOCAL_CART_STORAGE_KEY);
+      localStorage.removeItem(LOCAL_CUSTOMER_STORAGE_KEY);
       return null;
     }
     return parsed;
@@ -77,9 +87,11 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
       setSession(sess);
 
       const currentCart = sessionStorage.getItem(CART_STORAGE_KEY);
-      if (currentCart) {
+      const fallbackCart = localStorage.getItem(LOCAL_CART_STORAGE_KEY);
+      const cartRaw = currentCart || fallbackCart;
+      if (cartRaw) {
         try {
-          const parsed = JSON.parse(currentCart);
+          const parsed = JSON.parse(cartRaw);
           if (Array.isArray(parsed)) {
             setCartItems(parsed);
           }
@@ -94,7 +106,10 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
         sess?.sessionId || sessionStorage.getItem("agent-session-id") || null;
       setActiveSessionId(aid);
 
-      const storedCustomerId = sessionStorage.getItem(CUSTOMER_STORAGE_KEY) || "";
+      const storedCustomerId =
+        sessionStorage.getItem(CUSTOMER_STORAGE_KEY) ||
+        localStorage.getItem(LOCAL_CUSTOMER_STORAGE_KEY) ||
+        "";
       if (storedCustomerId) {
         setSelectedCustomerId(storedCustomerId);
       }
@@ -196,15 +211,25 @@ useEffect(() => {
   // ── Persist cart to sessionStorage whenever it changes ──
   useEffect(() => {
     sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems));
+    localStorage.setItem(LOCAL_CART_STORAGE_KEY, JSON.stringify(cartItems));
   }, [cartItems]);
 
   useEffect(() => {
     if (selectedCustomerId) {
       sessionStorage.setItem(CUSTOMER_STORAGE_KEY, selectedCustomerId);
+      localStorage.setItem(LOCAL_CUSTOMER_STORAGE_KEY, selectedCustomerId);
     } else {
       sessionStorage.removeItem(CUSTOMER_STORAGE_KEY);
+      localStorage.removeItem(LOCAL_CUSTOMER_STORAGE_KEY);
     }
   }, [selectedCustomerId]);
+
+  useEffect(() => {
+    if (session) {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+      localStorage.setItem(LOCAL_SESSION_STORAGE_KEY, JSON.stringify(session));
+    }
+  }, [session]);
 
   // ── Cart mutation helpers ──
 
@@ -282,6 +307,23 @@ useEffect(() => {
   const clearCart = useCallback(() => {
     setCartItems([]);
     sessionStorage.removeItem(CART_STORAGE_KEY);
+    localStorage.removeItem(LOCAL_CART_STORAGE_KEY);
+  }, []);
+
+  const resetShopState = useCallback(() => {
+    setCartItems([]);
+    setSession(null);
+    setActiveSessionId(null);
+    setSelectedCustomerId("");
+
+    sessionStorage.removeItem(CART_STORAGE_KEY);
+    sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    sessionStorage.removeItem(CUSTOMER_STORAGE_KEY);
+    sessionStorage.removeItem("agent-session-id");
+
+    localStorage.removeItem(LOCAL_CART_STORAGE_KEY);
+    localStorage.removeItem(LOCAL_SESSION_STORAGE_KEY);
+    localStorage.removeItem(LOCAL_CUSTOMER_STORAGE_KEY);
   }, []);
 
   const cartCount = useMemo(
@@ -307,6 +349,7 @@ useEffect(() => {
     removeFromCart,
     updateCartQuantity,
     clearCart,
+    resetShopState,
     cartCount,
     cartTotal,
   };

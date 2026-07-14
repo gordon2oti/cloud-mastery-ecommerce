@@ -8,6 +8,15 @@ export const CART_API_URL = rawCartUrl.replace(/\/+$/, "");
 
 import { CustomersType } from "./types/CustomersType";
 
+export type CreateCustomerPayload = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  address?: string;
+  city?: string;
+};
+
 export const getProducts = async () => {
   const res = await axios.get(`${API_URL}/products`);
   return res.data;
@@ -28,7 +37,7 @@ export const getCustomers = async () => {
   return res.data;
 };
 
-export const addCustomer = async (customer: CustomersType) => {
+export const addCustomer = async (customer: CreateCustomerPayload) => {
   const res = await axios.post(`${API_URL}/customers`, customer);
   return res.data;
 };

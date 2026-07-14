@@ -4,7 +4,19 @@ import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useShop } from "../../ShopProvider";
-import { addOrder, getCustomers } from "../../../api";
+import { addCustomer, addOrder, getCustomers } from "../../../api";
+
+const normalizePhone = (value: string) => {
+  const digits = (value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("254") && digits.length === 12) {
+    return `0${digits.slice(3)}`;
+  }
+  if (digits.length === 9) {
+    return `0${digits}`;
+  }
+  return digits;
+};
 
 function SuccessContent() {
   const searchParams = useSearchParams();
@@ -16,9 +28,9 @@ function SuccessContent() {
   useEffect(() => {
     if (!cleared && cartItems.length > 0) {
       const resolveCustomerId = async () => {
-        if (selectedCustomerId) return selectedCustomerId;
-
         try {
+          const sessionPhone = normalizePhone(session?.phone || "");
+
           const response = await getCustomers();
           const customerList = Array.isArray(response?.data)
             ? response.data
@@ -26,17 +38,37 @@ function SuccessContent() {
               ? response
               : [];
 
-          if (!customerList.length || !session?.phone) return "";
+          if (sessionPhone) {
+            const matched = customerList.find((customer: any) => {
+              return normalizePhone(customer.phone || "") === sessionPhone;
+            });
 
-          const normalizePhone = (value: string) => value.replace(/\D/g, "");
-          const sessionPhone = normalizePhone(session.phone);
-          const matched = customerList.find((customer: any) => {
-            return normalizePhone(customer.phone || "") === sessionPhone;
-          });
+            if (matched?.id) {
+              return matched.id;
+            }
 
-          return matched?.id || "";
+            if (session?.name) {
+              const [firstName, ...rest] = session.name.trim().split(/\s+/);
+              const lastName = rest.join(" ") || "Soko";
+              const created = await addCustomer({
+                firstName: firstName || "Guest",
+                lastName,
+                phone: sessionPhone,
+                email: `customer.${sessionPhone}@soko.user`,
+                address: session.location || "Nairobi",
+                city: session.location || "Nairobi",
+              });
+
+              const createdCustomer = created?.data ?? created;
+              if (createdCustomer?.id) {
+                return createdCustomer.id;
+              }
+            }
+          }
+
+          return selectedCustomerId || "";
         } catch {
-          return "";
+          return selectedCustomerId || "";
         }
       };
 

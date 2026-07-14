@@ -3,9 +3,21 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
-import { addOrder, getCustomers } from "../../api";
+import { addCustomer, getCustomers } from "../../api";
 import { CustomersType } from "../../types/CustomersType";
 import { useShop } from "../ShopProvider";
+
+const normalizePhone = (value: string) => {
+  const digits = (value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.startsWith("254") && digits.length === 12) {
+    return `0${digits.slice(3)}`;
+  }
+  if (digits.length === 9) {
+    return `0${digits}`;
+  }
+  return digits;
+};
 
 export default function ShopCartPage() {
   const {
@@ -31,10 +43,44 @@ export default function ShopCartPage() {
           : Array.isArray(response)
           ? response
           : [];
-        setCustomers(customerList);
+        let nextCustomers = [...customerList];
+        let resolvedCustomerId = selectedCustomerId;
 
-        if (!selectedCustomerId && customerList.length > 0) {
-          setSelectedCustomerId(customerList[0].id);
+        const sessionPhone = normalizePhone(session?.phone || "");
+        if (sessionPhone) {
+          const matched = nextCustomers.find((customer) => {
+            return normalizePhone(customer.phone || "") === sessionPhone;
+          });
+
+          if (matched) {
+            resolvedCustomerId = matched.id;
+          } else if (session?.name) {
+            const [firstName, ...rest] = session.name.trim().split(/\s+/);
+            const lastName = rest.join(" ") || "Soko";
+            const safePhone = sessionPhone || `07${Date.now().toString().slice(-8)}`;
+            const created = await addCustomer({
+              firstName: firstName || "Guest",
+              lastName,
+              phone: safePhone,
+              email: `customer.${safePhone}@soko.user`,
+              address: session.location || "Nairobi",
+              city: session.location || "Nairobi",
+            });
+
+            const createdCustomer = created?.data ?? created;
+            if (createdCustomer?.id) {
+              nextCustomers = [createdCustomer, ...nextCustomers];
+              resolvedCustomerId = createdCustomer.id;
+            }
+          }
+        }
+
+        setCustomers(nextCustomers);
+
+        if (resolvedCustomerId) {
+          setSelectedCustomerId(resolvedCustomerId);
+        } else if (nextCustomers.length > 0) {
+          setSelectedCustomerId(nextCustomers[0].id);
         }
       } catch {
         toast.error("Unable to load customers for checkout.");
@@ -42,7 +88,7 @@ export default function ShopCartPage() {
     };
 
     loadCustomers();
-  }, [selectedCustomerId, setSelectedCustomerId]);
+  }, [selectedCustomerId, setSelectedCustomerId, session]);
 
   const selectedCustomer = useMemo(
     () => customers.find((customer) => customer.id === selectedCustomerId),

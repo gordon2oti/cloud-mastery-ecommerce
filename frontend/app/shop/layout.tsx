@@ -13,7 +13,7 @@ const spaceGrotesk = Space_Grotesk({
 });
 
 function ShopNavigation() {
-  const { cartCount } = useShop();
+  const { cartCount, resetShopState } = useShop();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const links = [
@@ -78,6 +78,13 @@ function ShopNavigation() {
               {link.label}
             </Link>
           ))}
+          <button
+            type="button"
+            onClick={resetShopState}
+            className="rounded-full border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+          >
+            Reset
+          </button>
         </nav>
       </div>
 
@@ -94,6 +101,16 @@ function ShopNavigation() {
                 {link.label}
               </Link>
             ))}
+            <button
+              type="button"
+              onClick={() => {
+                resetShopState();
+                setIsMenuOpen(false);
+              }}
+              className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+            >
+              Reset
+            </button>
           </div>
         </nav>
       )}
