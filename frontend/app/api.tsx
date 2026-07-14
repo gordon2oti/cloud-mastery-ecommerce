@@ -42,12 +42,22 @@ export const addCustomer = async (customer: CreateCustomerPayload) => {
   return res.data;
 };
 
+export const deleteCustomer = async (customerId: string) => {
+  const res = await axios.delete(`${API_URL}/customers/${customerId}`);
+  return res.data;
+};
+
 export const getOrders = async () => {
   const res = await axios.get(`${API_URL}/orders`);
   return res.data;
 };
 export const addOrder = async (order: object) => {
   const res = await axios.post(`${API_URL}/orders`, order);
+  return res.data;
+};
+
+export const deleteOrder = async (orderId: string) => {
+  const res = await axios.delete(`${API_URL}/orders/${orderId}`);
   return res.data;
 };
 

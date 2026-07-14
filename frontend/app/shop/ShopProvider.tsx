@@ -11,6 +11,10 @@ import {
 } from "react";
 import {
   addToCartApi,
+  deleteCustomer,
+  deleteOrder,
+  getCustomers,
+  getOrders,
   modifyCartApi,
   removeCartItemApi,
   getCartFromApi,
@@ -35,7 +39,7 @@ type ShopContextType = {
   removeFromCart: (productId: string) => void;
   updateCartQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
-  resetShopState: () => void;
+  resetShopState: () => Promise<void>;
   cartCount: number;
   cartTotal: number;
 };
@@ -315,6 +319,77 @@ useEffect(() => {
   }, []);
 
   const resetShopState = useCallback(() => {
+    const normalizePhone = (value: string) => {
+      const digits = (value || "").replace(/\D/g, "");
+      if (!digits) return "";
+      if (digits.startsWith("254") && digits.length === 12) {
+        return `0${digits.slice(3)}`;
+      }
+      if (digits.length === 9) {
+        return `0${digits}`;
+      }
+      return digits;
+    };
+
+    const cleanupRemoteCustomer = async () => {
+      const sessionPhone = normalizePhone(session?.phone || "");
+      if (!sessionPhone) return;
+
+      try {
+        const response = await getCustomers();
+        const customerList = Array.isArray(response?.data)
+          ? response.data
+          : Array.isArray(response)
+            ? response
+            : [];
+
+        const idsToDelete = new Set<string>();
+
+        customerList.forEach((customer: any) => {
+          const phoneMatches = normalizePhone(customer?.phone || "") === sessionPhone;
+          const isSessionGenerated = String(customer?.email || "").endsWith("@soko.user");
+          if (phoneMatches && isSessionGenerated && customer?.id) {
+            idsToDelete.add(customer.id);
+          }
+        });
+
+        if (selectedCustomerId) {
+          const selected = customerList.find((c: any) => c?.id === selectedCustomerId);
+          const selectedIsSessionGenerated = String(selected?.email || "").endsWith("@soko.user");
+          if (selectedIsSessionGenerated) {
+            idsToDelete.add(selectedCustomerId);
+          }
+        }
+
+        if (idsToDelete.size > 0) {
+          const ordersResponse = await getOrders();
+          const orderList = Array.isArray(ordersResponse?.data)
+            ? ordersResponse.data
+            : Array.isArray(ordersResponse)
+              ? ordersResponse
+              : [];
+
+          const orderIdsToDelete = orderList
+            .filter((order: any) => idsToDelete.has(order?.customerId))
+            .map((order: any) => order?.id)
+            .filter(Boolean);
+
+          await Promise.allSettled(
+            orderIdsToDelete.map((orderId: string) => deleteOrder(orderId)),
+          );
+        }
+
+        await Promise.allSettled(
+          Array.from(idsToDelete).map((id) => deleteCustomer(id)),
+        );
+      } catch {
+        // Best effort cleanup; reset should still continue.
+      }
+    };
+
+    const runReset = async () => {
+      await cleanupRemoteCustomer();
+
     setCartItems([]);
     setSession(null);
     setActiveSessionId(null);
@@ -343,7 +418,10 @@ useEffect(() => {
     });
 
     window.location.assign("/shop");
-  }, []);
+    };
+
+    return runReset();
+  }, [selectedCustomerId, session]);
 
   const cartCount = useMemo(
     () => cartItems.reduce((sum, item) => sum + item.cartQuantity, 0),
