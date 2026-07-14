@@ -1,0 +1,46 @@
+chat-messenger,
+chat-messenger.slide-in,
+chat-messenger.slide-over {
+  --chat-messenger-internal-chat-window-width: min(400px, calc(100vw - 0px)) !important;
+  --chat-messenger-internal-chat-window-height: 500px !important;
+  --chat-messenger-internal-chat-wrapper-height: 500px !important;
+  width: min(400px, calc(100vw - 24px)) !important;
+  height: 500px !important;
+  max-height: 500px !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  right: 16px !important;
+  bottom: 16px !important;
+  left: auto !important;
+  top: auto !important;
+  position: fixed !important;
+  border-radius: 40px !important;
+  overflow: hidden !important;
+  z-index: 99999 !important;
+}
+
+chat-messenger.messenger-hidden,
+chat-messenger.slide-in.messenger-hidden,
+chat-messenger.slide-over.messenger-hidden {
+  right: 16px !important;
+  bottom: 16px !important;
+  left: auto !important;
+  top: auto !important;
+}
+
+@media (max-width: 600px) {
+  chat-messenger,
+  chat-messenger.slide-in,
+  chat-messenger.slide-over {
+    --chat-messenger-internal-chat-window-width: min(400px, calc(100vw - 0px)) !important;
+    --chat-messenger-internal-chat-window-height: 500px !important;
+    --chat-messenger-internal-chat-wrapper-height: 500px !important;
+    width: min(400px, calc(100vw - 24px)) !important;
+    height: 500px !important;
+    max-height: 500px !important;
+    min-width: 0 !important;
+    right: 12px !important;
+    bottom: 12px !important;
+    border-radius: 40px !important;
+  }
+}

@@ -70,34 +70,92 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
 
-  // ── Hydrate cart and session from sessionStorage on mount ──
-  useEffect(() => {
-    const storedCart = sessionStorage.getItem(CART_STORAGE_KEY);
-    if (storedCart) {
-      try {
-        const parsed = JSON.parse(storedCart) as CartItem[];
-        setCartItems(Array.isArray(parsed) ? parsed : []);
-      } catch {
-        setCartItems([]);
-      }
-    }
-
-    const updateActiveId = () => {
+  // ── Fast hydration loop: keep UI in sync with sessionStorage changes ──
+  const hydrateFromStorage = useCallback(() => {
       const sess = readSession();
       setSession(sess);
-      const aid = typeof window !== "undefined"
-        ? (sessionStorage.getItem("agent-session-id") || sess?.sessionId || null)
-        : null;
+
+      const currentCart = sessionStorage.getItem(CART_STORAGE_KEY);
+      if (currentCart) {
+        try {
+          const parsed = JSON.parse(currentCart);
+          if (Array.isArray(parsed)) {
+            setCartItems(parsed);
+          }
+        } catch {
+          // Ignore malformed storage payloads
+        }
+      } else {
+        setCartItems((prev) => (prev.length ? [] : prev));
+      }
+
+      const aid =
+        sessionStorage.getItem("agent-session-id") || sess?.sessionId || null;
       setActiveSessionId(aid);
-    };
-
-    updateActiveId();
-
-    window.addEventListener("hazel-session-changed", updateActiveId);
-    return () => {
-      window.removeEventListener("hazel-session-changed", updateActiveId);
-    };
   }, []);
+
+// 1. Run hydration ONCE on mount, not on a 100ms loop
+useEffect(() => {
+  hydrateFromStorage();
+  
+  // Optional: Listen for cross-tab changes natively without a loop
+  const handleStorageChange = (e: StorageEvent) => {
+    if (e.key === CART_STORAGE_KEY) hydrateFromStorage();
+  };
+  window.addEventListener("storage", handleStorageChange);
+  
+  return () => window.removeEventListener("storage", handleStorageChange);
+}, [hydrateFromStorage]);
+
+
+// 2. Safely merge API data without fighting sessionStorage
+useEffect(() => {
+  if (!activeSessionId) return;
+
+  const syncFromApi = async () => {
+    try {
+      const res = await getCartFromApi(activeSessionId);
+      if (!res.success || !res.cart.items) return;
+
+      setCartItems((prev) => {
+        // If the backend has items, but our local state doesn't, accept the backend!
+        const merged = [...prev];
+        let stateChanged = false;
+
+        for (const apiItem of res.cart.items) {
+          const existing = merged.find((i) => i.id === apiItem.productId);
+          if (existing) {
+            if (existing.cartQuantity !== apiItem.quantity) {
+              existing.cartQuantity = apiItem.quantity;
+              stateChanged = true;
+            }
+          } else {
+            merged.push({
+              id: apiItem.productId,
+              name: apiItem.productName,
+              unitCost: String(apiItem.unitCost),
+              cartQuantity: apiItem.quantity,
+              category: "",
+              imageUrl: "",
+              quantity: 9999,
+              totalCost: String(apiItem.lineTotalKes),
+            } as unknown as CartItem);
+            stateChanged = true;
+          }
+        }
+        
+        // Only trigger a React update if something actually changed
+        return stateChanged ? merged : prev;
+      });
+    } catch {
+      // Silently ignore network errors
+    }
+  };
+
+  syncFromApi();
+  const interval = setInterval(syncFromApi, 2000);
+  return () => clearInterval(interval);
+}, [activeSessionId]);
 
   // ── Active Session Expiry Check ──
   useEffect(() => {
@@ -127,51 +185,6 @@ export function ShopProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     sessionStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cartItems));
   }, [cartItems]);
-
-  // ── Poll the Python cart service every 4 seconds to sync agent-added items ──
-  useEffect(() => {
-    if (!activeSessionId) return;
-
-    const sync = async () => {
-      try {
-        const res = await getCartFromApi(activeSessionId);
-        if (!res.success) return;
-
-        // Merge agent-side cart items into React state.
-        // The Python service is the source of truth for items the agent added.
-        setCartItems((prev) => {
-          const merged = [...prev];
-          for (const apiItem of res.cart.items) {
-            const existing = merged.find((i) => i.id === apiItem.productId);
-            if (existing) {
-              if (existing.cartQuantity !== apiItem.quantity) {
-                existing.cartQuantity = apiItem.quantity;
-              }
-            } else {
-              merged.push({
-                id: apiItem.productId,
-                name: apiItem.productName,
-                unitCost: String(apiItem.unitCost),
-                cartQuantity: apiItem.quantity,
-                description: "",
-                category: "",
-                imageUrl: "",
-                quantity: 9999,
-                totalCost: String(apiItem.lineTotalKes),
-              } as unknown as CartItem);
-            }
-          }
-          return merged;
-        });
-      } catch {
-        // Silently ignore network errors during polling
-      }
-    };
-
-    sync(); // Immediate first fetch
-    const interval = setInterval(sync, 4000);
-    return () => clearInterval(interval);
-  }, [activeSessionId]);
 
   // ── Cart mutation helpers ──
 

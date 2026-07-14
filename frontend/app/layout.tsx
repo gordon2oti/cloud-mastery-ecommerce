@@ -1,4 +1,6 @@
 import "./globals.css";
+import "./chat-messenger-default.css";
+import "./chat-messenger-overrides.css";
 import ChatWidget from "./components/ChatWidget";
 import Script from "next/script";
 
@@ -14,16 +16,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        <link rel="stylesheet" href="https://www.gstatic.com/chat-messenger/sdk/prod/v1.16/themes/chat-messenger-default.css" />
-        <link rel="stylesheet" href="https://www.gstatic.com/chat-messenger/sdk/prod/v1.16/themes/chat-messenger-layout.css" />
-      </head>
       <body suppressHydrationWarning>
         {children}
         <ChatWidget />
         {/* Load the widget script after the page is interactive so it finds the custom elements in the DOM */}
         <Script
-          src="https://www.gstatic.com/chat-messenger/sdk/prod/v1.16/chat-messenger.js"
+          src="/chat-messenger/chat-messenger.js"
           strategy="afterInteractive"
         />
       </body>
