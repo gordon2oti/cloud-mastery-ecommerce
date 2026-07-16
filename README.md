@@ -31,3 +31,6 @@ Set `NEXT_PUBLIC_API_URL` in `.env.local` if your backend URL is different.
 ## Frontend Notes
 
 - Chat widget mobile containment strategy: google keep
+##
+- TESTING BANA tyeg jhreh
+######
